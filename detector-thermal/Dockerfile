@@ -24,7 +24,7 @@ RUN pip3 install --no-cache-dir --force-reinstall --upgrade \
       torch==2.3.0 \
       ultralytics==8.3.112 \
       samurai==0.6 \
-      norfair==2.3.1 \
+      norfair==2.2.0 \
       websockets==12.0 \
       prometheus_client==0.20.0
 
