@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'thermal-detector'
+    static_configs:
+      - targets: ['detector-thermal:9103']
+
+  - job_name: 'fusion'
+    static_configs:
+      - targets: ['fusion:9104']
