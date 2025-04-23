@@ -1,4 +1,16 @@
 services:
+  # ───────────────────────────── RGB detector (YOLOv8) ────────────────────────────────
+  detector-rgb:
+    build: ./detector-rgb
+    environment:
+      - RTSP_URL=${RTSP_URL}  # RGB camera stream
+      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}  # defaulting to CPU mode
+    volumes:
+      - ./weights:/opt/weights        # RGB weights
+    restart: unless-stopped
+    ports:
+      - "8765:8765"                   # WebSocket alerts (RGB)
+
   # ───────────────────────────── Thermal detector (YOLOv11‑T) ───────────────────────────
   detector-thermal:
     build: ./detector-thermal
@@ -14,9 +26,10 @@ services:
   # ─────────────────────────────── Fusion service ───────────────────────────────────────
   fusion:
     build: ./fusion
-    depends_on: [detector-thermal]
+    depends_on: [detector-thermal, detector-rgb]
     environment:
       - THERMAL_WS=ws://detector-thermal:8766
+      - RGB_WS=ws://detector-rgb:8765
     ports:
       - "8770:8770"                   # Fused alerts WebSocket
     restart: unless-stopped

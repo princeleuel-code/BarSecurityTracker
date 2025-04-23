@@ -3,6 +3,10 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
+  - job_name: 'rgb-detector'
+    static_configs:
+      - targets: ['detector-rgb:9104']
+
   - job_name: 'thermal-detector'
     static_configs:
       - targets: ['detector-thermal:9103']
