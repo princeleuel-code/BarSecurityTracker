@@ -1,0 +1,12 @@
+{
+  "name": "alertbus",
+  "version": "1.0.0",
+  "description": "Alert bus for BarSecurityTracker",
+  "main": "alertbus.js",
+  "scripts": {
+    "start": "node alertbus.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
