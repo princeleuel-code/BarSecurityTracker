@@ -7,7 +7,8 @@ import time
 from prometheus_client import Counter, Summary
 import prometheus_client as prom
 from ultralytics import YOLO
-from samurai import SamuraiTracker
+# Temporarily comment out SamuraiTracker import
+# from samurai import SamuraiTracker
 import websockets
 
 # ─────────── Configuration ───────────
@@ -29,7 +30,8 @@ infer_latency = prom.Summary("thermal_inference_ms", "Inference latency (ms)")
 # ─────────── Load models ───────────
 model = YOLO(MODEL_PATH)
 model.to(DEVICE)
-sam = SamuraiTracker(weights_path=SAM_PATH, device=DEVICE)
+# Temporarily comment out SamuraiTracker
+# sam = SamuraiTracker(weights_path=SAM_PATH, device=DEVICE)
 
 # ─────────── Async detection loop ───────────
 async def detector_loop(ws):
@@ -57,9 +59,10 @@ async def detector_loop(ws):
 
             x1, y1, x2, y2 = map(int, box)
             crop = frame[y1:y2, x1:x2]
-            mask = sam.segment(crop)
-            if mask.sum() < 200:   # ignore tiny blobs
-                continue
+            # Temporarily comment out segmentation
+            # mask = sam.segment(crop)
+            # if mask.sum() < 200:   # ignore tiny blobs
+            #     continue
 
             alert = {
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
