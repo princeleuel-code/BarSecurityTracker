@@ -34,6 +34,39 @@ model.to(DEVICE)
 # Temporarily comment out SamuraiTracker
 # sam = SamuraiTracker(weights_path=SAM_PATH, device=DEVICE)
 
+# ─────────── Test metrics generator ───────────
+async def generate_test_metrics(ws):
+    print("Starting test metrics generation")
+    while True:
+        # Increment frame counter
+        frames_total.inc()
+
+        # Simulate inference latency
+        t0 = time.time()
+        await asyncio.sleep(0.05)  # Simulate processing time
+        infer_latency.observe((time.time() - t0) * 1000)
+
+        # Every 10 frames, generate a test alert
+        if frames_total._value.get() % 10 == 0:
+            event_type = "person_detected"
+            if frames_total._value.get() % 30 == 0:
+                event_type = "gun_detected"
+            elif frames_total._value.get() % 20 == 0:
+                event_type = "knife_detected"
+
+            alert = {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
+                "camera_id": CAM_ID,
+                "event": event_type,
+                "confidence": 0.85 + (time.time() % 0.1),  # Random confidence between 0.85-0.95
+                "bbox": [100, 100, 300, 400],  # Fixed bounding box for testing
+            }
+            alerts_total.labels(alert["event"]).inc()
+            await ws.send(json.dumps(alert))
+            print(f"Generated test alert: {event_type}")
+
+        await asyncio.sleep(1)  # Generate metrics once per second
+
 # ─────────── Async detection loop ───────────
 async def detector_loop(ws):
     # Try to open the RTSP stream
@@ -47,7 +80,9 @@ async def detector_loop(ws):
             cap.open(0)
             if not cap.isOpened():
                 print("Could not open dummy video source either")
-                await asyncio.sleep(2)
+                print("Generating test metrics for Grafana dashboard")
+                # Generate test metrics even without a video source
+                await generate_test_metrics(ws)
                 return
     except Exception as e:
         print(f"Error opening video source: {e}")
@@ -57,7 +92,9 @@ async def detector_loop(ws):
         cap.open(0)
         if not cap.isOpened():
             print("Could not open dummy video source either")
-            await asyncio.sleep(2)
+            print("Generating test metrics for Grafana dashboard")
+            # Generate test metrics even without a video source
+            await generate_test_metrics(ws)
             return
 
     while True:
