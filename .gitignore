@@ -134,3 +134,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# local tools / weights
+browser-tools-mcp
+python/yolo/yolov12
