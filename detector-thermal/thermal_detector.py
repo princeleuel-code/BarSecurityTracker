@@ -19,7 +19,8 @@ WS_PORT = 8766
 PROM_PORT = 9103
 CONF_THRES = 0.35
 
-MODEL_PATH = "/opt/weights/barshield_yolov11t.pt"
+# Use a default YOLO model for testing
+MODEL_PATH = "yolov8n.pt"
 SAM_PATH = "/opt/weights/sam2_b.pt"
 
 # ─────────── Prometheus metrics ───────────
