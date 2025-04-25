@@ -2,6 +2,14 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - "ffd_rules.yml"
+  - "ffd_alerts.yml"
+  - "gun_rules.yml"
+  - "gun_alerts.yml"
+  - "fusion_rules.yml"
+  - "fusion_alerts.yml"
+
 scrape_configs:
   - job_name: 'rgb-detector'
     static_configs:
@@ -10,6 +18,14 @@ scrape_configs:
   - job_name: 'thermal-detector'
     static_configs:
       - targets: ['detector-thermal:9103']
+
+  - job_name: 'ffd-detector'
+    static_configs:
+      - targets: ['detector-ffd:9105']
+
+  - job_name: 'gun-detector'
+    static_configs:
+      - targets: ['detector-gun:9106']
 
   - job_name: 'fusion'
     static_configs:

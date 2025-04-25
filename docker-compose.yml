@@ -3,7 +3,7 @@ services:
   detector-rgb:
     build: ./detector-rgb
     environment:
-      - RTSP_URL=${RTSP_URL}  # RGB camera stream
+      - RTSP_URL=rtsp://admin:1541Playdc7thst@10.1.10.239:8554/Streaming/Channels/201  # RGB camera stream
       - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}  # defaulting to CPU mode
     volumes:
       - ./weights:/opt/weights        # RGB weights
@@ -16,20 +16,46 @@ services:
     build: ./detector-thermal
     environment:
       - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
-      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}  # defaulting to CPU mode
+      - BARSHIELD_DEVICE=cpu
     volumes:
       - ./weights:/opt/weights        # thermal weights
     restart: unless-stopped
     ports:
       - "8766:8766"                   # WebSocket alerts (thermal)
 
+  # ───────────────────────────── Thermal Gun detector ───────────────────────────
+  detector-gun:
+    build: ./detector-thermal
+    environment:
+      - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
+      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
+    volumes:
+      - ./weights:/opt/weights        # thermal weights
+    restart: unless-stopped
+    ports:
+      - "9106:9106"                   # WebSocket alerts + Prometheus metrics
+    command: ["python", "gun_detector.py"]
+
+  # ───────────────────────────── Fight/Fall detector (MoveNet) ───────────────────────────
+  detector-ffd:
+    build: ./detector-ffd
+    environment:
+      - RTSP_URL=${RTSP_URL:-https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4}  # RGB camera stream for pose detection
+      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
+    restart: unless-stopped
+    ports:
+      - "8767:8767"                   # WebSocket alerts (FFD)
+      - "9105:9105"                   # Prometheus metrics (FFD)
+
   # ─────────────────────────────── Fusion service ───────────────────────────────────────
   fusion:
     build: ./fusion
-    depends_on: [detector-thermal, detector-rgb]
+    depends_on: [detector-thermal, detector-rgb, detector-ffd, detector-gun]
     environment:
       - THERMAL_WS=ws://detector-thermal:8766
       - RGB_WS=ws://detector-rgb:8765
+      - FFD_WS=ws://detector-ffd:8767
+      - GUN_WS=ws://detector-gun:9106
     ports:
       - "8770:8770"                   # Fused alerts WebSocket
     restart: unless-stopped
