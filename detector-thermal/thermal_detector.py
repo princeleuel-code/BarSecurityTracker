@@ -4,7 +4,7 @@ import cv2
 import json
 import os
 import time
-from prometheus_client import Counter, Summary
+from prometheus_client import Counter, Histogram
 import prometheus_client as prom
 from ultralytics import YOLO
 # Temporarily comment out SamuraiTracker import
@@ -26,11 +26,22 @@ SAM_PATH = "/opt/weights/sam2_b.pt"
 # ─────────── Prometheus metrics ───────────
 frames_total = prom.Counter("thermal_frames_total", "Frames processed")
 alerts_total = prom.Counter("thermal_alerts_total", "Alerts emitted", ["event"])
-infer_latency = prom.Summary("thermal_inference_ms", "Inference latency (ms)")
+infer_latency = Histogram(
+    "thermal_inference_ms",
+    "Inference latency (ms)",
+    buckets=[5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 300, 400, 500]
+)
 
 # ─────────── Load models ───────────
-model = YOLO(MODEL_PATH)
-model.to(DEVICE)
+print(f"Loading YOLO model on device: {DEVICE}")
+try:
+    model = YOLO(MODEL_PATH)
+    model.to(DEVICE)
+except Exception as e:
+    print(f"Error loading model: {e}")
+    print("Falling back to CPU")
+    model = YOLO(MODEL_PATH)
+    model.to("cpu")
 # Temporarily comment out SamuraiTracker
 # sam = SamuraiTracker(weights_path=SAM_PATH, device=DEVICE)
 
@@ -69,33 +80,30 @@ async def generate_test_metrics(ws):
 
 # ─────────── Async detection loop ───────────
 async def detector_loop(ws):
-    # Try to open the RTSP stream
+    # Try to open the video source
     try:
-        cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+        print(f"Opening video source: {RTSP_URL}")
+        # For HTTP URLs (like the sample video), don't use CAP_FFMPEG
+        if RTSP_URL.startswith("http"):
+            cap = cv2.VideoCapture(RTSP_URL)
+        else:
+            cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+
+        # Set a shorter timeout for the video capture
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)  # 5 seconds timeout
+
         if not cap.isOpened():
-            print(f"🔥 [Thermal] Unable to open RTSP: {RTSP_URL}")
-            print("Using a dummy video source for testing")
-            # Create a dummy video source (black frames)
-            cap = cv2.VideoCapture()
-            cap.open(0)
-            if not cap.isOpened():
-                print("Could not open dummy video source either")
-                print("Generating test metrics for Grafana dashboard")
-                # Generate test metrics even without a video source
-                await generate_test_metrics(ws)
-                return
-    except Exception as e:
-        print(f"Error opening video source: {e}")
-        print("Using a dummy video source for testing")
-        # Create a dummy video source (black frames)
-        cap = cv2.VideoCapture()
-        cap.open(0)
-        if not cap.isOpened():
-            print("Could not open dummy video source either")
+            print(f"🔥 [Thermal] Unable to open video source: {RTSP_URL}")
             print("Generating test metrics for Grafana dashboard")
-            # Generate test metrics even without a video source
             await generate_test_metrics(ws)
             return
+        else:
+            print(f"✅ Successfully opened video source: {RTSP_URL}")
+    except Exception as e:
+        print(f"Error opening video source: {e}")
+        print("Generating test metrics for Grafana dashboard")
+        await generate_test_metrics(ws)
+        return
 
     while True:
         ok, frame = cap.read()
