@@ -1,94 +1,156 @@
+version: "3.9"
+
 services:
-  # ───────────────────────────── RGB detector (YOLOv8) ────────────────────────────────
+  mediamtx:
+    build: ./mediamtx
+    container_name: ${COMPOSE_PROJECT_NAME}-mediamtx-1
+    restart: unless-stopped
+    ports:
+      - "8554:8554"          # RTSP in/out
+      - "8888:8888"          # HLS
+      - "8889:8889"          # WebRTC HTTP
+      - "8189:8189/udp"      # WebRTC ICE/UDP
+      - "1935:1935"          # RTMP
+    volumes:
+      - ./transcode.sh:/app/transcode.sh:ro
+      - ./ingest:/app/ingest:ro   # mount ffmpeg-wrapper and watcher scripts
+      - hls_data:/media           # HLS segments directory
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8554"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  feedwatcher-cam1:
+    build: ./ingest/feedwatcher
+    environment:
+      - RTSP_IN=${RTSP_IN}
+      - FEED_NAME=cam1
+      - ALERT_ENDPOINT=http://alertbus:8080/feed
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      mediamtx:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-admin}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  analysis_service:
+    build: ./analysis_service
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "9105:9105"    # Prometheus metrics
+    environment:
+      - PROMETHEUS_PORT=9105
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASS=${RABBITMQ_PASS:-admin}
+      - TRACKER_TYPE=bytetrack
+
+  rtsp-viewer:
+    build: ./rtsp-viewer
+    ports:
+      - "3000:3000"
+    environment:
+      - RTSP_URL=${RTSP_URL}
+    depends_on:
+      - mediamtx
+
   detector-rgb:
     build: ./detector-rgb
     environment:
-      - RTSP_URL=rtsp://admin:1541Playdc7thst@10.1.10.239:8554/Streaming/Channels/201  # RGB camera stream
-      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}  # defaulting to CPU mode
+      - RTSP_URL=${RTSP_URL}
+      - MODEL_PATH=/models/yolov8n.pt
     volumes:
-      - ./weights:/opt/weights        # RGB weights
-    restart: unless-stopped
-    ports:
-      - "8765:8765"                   # WebSocket alerts (RGB)
+      - ./weights:/models
+    depends_on:
+      - mediamtx
 
-  # ───────────────────────────── Thermal detector (YOLOv11‑T) ───────────────────────────
   detector-thermal:
     build: ./detector-thermal
     environment:
-      - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
-      - BARSHIELD_DEVICE=cpu
+      - RTSP_URL=${RTSP_URL}
+      - MODEL_PATH=/models/yolov8n.pt
     volumes:
-      - ./weights:/opt/weights        # thermal weights
-    restart: unless-stopped
-    ports:
-      - "8766:8766"                   # WebSocket alerts (thermal)
+      - ./weights:/models
+    depends_on:
+      - mediamtx
 
-  # ───────────────────────────── Thermal Gun detector ───────────────────────────
-  detector-gun:
-    build: ./detector-thermal
-    environment:
-      - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
-      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
-    volumes:
-      - ./weights:/opt/weights        # thermal weights
-    restart: unless-stopped
-    ports:
-      - "9106:9106"                   # WebSocket alerts + Prometheus metrics
-    command: ["python", "gun_detector.py"]
-
-  # ───────────────────────────── Fight/Fall detector (MoveNet) ───────────────────────────
-  detector-ffd:
-    build: ./detector-ffd
-    environment:
-      - RTSP_URL=${RTSP_URL:-https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4}  # RGB camera stream for pose detection
-      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
-    restart: unless-stopped
-    ports:
-      - "8767:8767"                   # WebSocket alerts (FFD)
-      - "9105:9105"                   # Prometheus metrics (FFD)
-
-  # ─────────────────────────────── Fusion service ───────────────────────────────────────
   fusion:
     build: ./fusion
-    depends_on: [detector-thermal, detector-rgb, detector-ffd, detector-gun]
+    ports:
+      - "8770:8770"
     environment:
-      - THERMAL_WS=ws://detector-thermal:8766
-      - RGB_WS=ws://detector-rgb:8765
-      - FFD_WS=ws://detector-ffd:8767
-      - GUN_WS=ws://detector-gun:9106
-    ports:
-      - "8770:8770"                   # Fused alerts WebSocket
-    restart: unless-stopped
+      - RGB_WS=ws://detector-rgb:8760
+      - THERMAL_WS=ws://detector-thermal:8760
+      - FFD_WS=ws://detector-ffd:8760
+      - GUN_WS=ws://detector-gun:8760
+    depends_on:
+      - detector-rgb
+      - detector-thermal
 
-  # ───────────────────────────── Observability stack ────────────────────────────────────
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    ports:
-      - "9090:9090"
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    depends_on: [prometheus]
-    ports:
-      - "3000:3000"
-
-  # ───────────────────────────── Dashboard UI ────────────────────────────────────
-  dashboard:
-    build: ./dashboard
-    depends_on: [alertbus]
-    ports:
-      - "5173:80"
-    restart: unless-stopped
-
-  # ───────────────────────────── Alert Bus ────────────────────────────────────
   alertbus:
     build: ./alertbus
-    depends_on: [fusion]
+    ports:
+      - "8780:8780"
     environment:
       - FUSION_WS=ws://fusion:8770
-    restart: unless-stopped
+      - METRICS_WS=ws://metrics:8790
+      - PORT=8780
+    depends_on:
+      - fusion
+      - metrics
+
+  metrics:
+    build:
+      context: .
+      dockerfile: ./server/Dockerfile
+    ports:
+      - "8790:8790"
+    environment:
+      - NODE_ENV=production
+      - RTSP_URL=${RTSP_URL}
+      - HLS_OUTPUT_DIR=/app/public/hls
+    volumes:
+      - ./public/hls:/app/public/hls
+    depends_on:
+      - mediamtx
+
+  client:
+    build: ./client
+    ports:
+      - "80:80"
+    environment:
+      - VITE_HLS_URL=http://localhost:8888/cam1-hls/stream.m3u8
+      - VITE_WS_URL=ws://localhost:8780
+    depends_on:
+      - alertbus
+      - metrics
+      - mediamtx
+
+  test-client:
+    build: ./test-client
+    ports:
+      - "8080:80"
+    depends_on:
+      - mediamtx
 
 volumes:
-  weights:
+  hls_data:

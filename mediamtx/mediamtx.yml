@@ -1,0 +1,21 @@
+logLevel: info
+hls: yes
+hlsDirectory: /media
+hlsSegmentDuration: 4s
+hlsSegmentCount: 7
+hlsAlwaysRemux: yes
+hlsVariant: mpegts
+hlsPartDuration: 1s
+readTimeout: 10s
+writeTimeout: 10s
+hlsAllowOrigin: "*"
+
+paths:
+  cam1-hls:
+    runOnInit: |
+      ffmpeg -hide_banner -loglevel warning \
+        -re -f lavfi -i "testsrc=size=1280x720:rate=30" \
+        -c:v libx264 -preset ultrafast -tune zerolatency \
+        -force_key_frames "expr:gte(t,n_forced*2)" \
+        -f rtsp "rtsp://127.0.0.1:8554/cam1-hls"
+    runOnInitRestart: yes
