@@ -1,0 +1,18 @@
+# ---- stage 1: download statically-linked binary ----
+FROM alpine:3.19 AS downloader
+ARG VERSION=v1.8.2
+RUN apk add --no-cache curl \
+ && curl -v -S --fail -L -o /mediamtx.tar.gz \
+      https://github.com/bluenviron/mediamtx/releases/download/${VERSION}/mediamtx_${VERSION}_linux_amd64.tar.gz \
+ && echo "--- Start of downloaded file ---" \
+ && head -n 5 /mediamtx.tar.gz \
+ && echo "--- End of downloaded file snippet ---" \
+ && tar -xzf /mediamtx.tar.gz
+
+# ---- stage 2: run ----
+FROM alpine:3.19
+RUN apk add --no-cache ffmpeg   # <- only if you want ffmpeg inside
+COPY --from=downloader /mediamtx /mediamtx
+# COPY mediamtx.yml /mediamtx.yml            # mounted in compose but handy for stand-alone
+EXPOSE 8554 8888
+ENTRYPOINT ["/mediamtx", "/mediamtx.yml"] 
