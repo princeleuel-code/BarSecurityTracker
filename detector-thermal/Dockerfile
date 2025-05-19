@@ -37,4 +37,4 @@ COPY gun_detector.py .
 # 4. Use BARSHIELD_DEVICE from docker-compose.yml
 
 # 5. Entrypoint (can be overridden in docker-compose.yml)
-CMD ["python", "thermal_detector.py"]
+CMD ["python", "gun_detector.py"]
