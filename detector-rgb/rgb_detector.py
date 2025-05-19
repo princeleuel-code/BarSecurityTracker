@@ -15,10 +15,11 @@ DEVICE = os.getenv("BARSHIELD_DEVICE", "cuda")
 CAM_ID = "rgb_01"
 WS_PORT = 8765
 PROM_PORT = 9104
-CONF_THRES = 0.35
+CONF_THRES = 0.25
 
-# Use a default YOLO model for testing
-MODEL_PATH = "yolov8n.pt"
+# ─────────── Gun model ───────────
+# Path to a weapon‑aware YOLOv8 model. Can be overridden via env.
+MODEL_PATH = os.getenv("GUN_MODEL_PATH", "models/gun_yolov8n.pt")
 
 # ─────────── Prometheus metrics ───────────
 frames_total = prom.Counter("rgb_frames_total", "Frames processed")
@@ -28,6 +29,11 @@ infer_latency = prom.Summary("rgb_inference_ms", "Inference latency (ms)")
 # ─────────── Load models ───────────
 model = YOLO(MODEL_PATH)
 model.to(DEVICE)
+# Determine which class labels correspond to guns/pistols
+GUN_CLASSES = {
+    n for n in model.names.values()
+    if "gun" in n.lower() or "pistol" in n.lower()
+}
 
 # ─────────── Test metrics generator ───────────
 async def generate_test_metrics(ws):
@@ -116,7 +122,7 @@ async def detector_loop(ws):
 
         for cls_i, conf, box in zip(res.boxes.cls, res.boxes.conf, res.boxes.xyxy):
             label = model.names[int(cls_i)]
-            if label not in {"person", "car", "truck", "gun", "knife"} or conf < CONF_THRES:
+            if label not in GUN_CLASSES or conf < CONF_THRES:
                 continue
 
             x1, y1, x2, y2 = map(int, box)

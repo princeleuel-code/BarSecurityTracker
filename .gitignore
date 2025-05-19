@@ -138,3 +138,5 @@ dist
 # local tools / weights
 browser-tools-mcp
 python/yolo/yolov12
+.DS_Store
+* 2.*
