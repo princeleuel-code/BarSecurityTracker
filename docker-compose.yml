@@ -5,8 +5,9 @@ services:
     environment:
       - RTSP_URL=rtsp://admin:1541Playdc7thst@10.1.10.239:8554/Streaming/Channels/201  # RGB camera stream
       - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}  # defaulting to CPU mode
+      - GUN_MODEL_PATH=/models/gun_yolov8n.pt
     volumes:
-      - ./weights:/opt/weights        # RGB weights
+      - ./models:/models:ro           # gun model weights
     restart: unless-stopped
     ports:
       - "8765:8765"                   # WebSocket alerts (RGB)
