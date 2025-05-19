@@ -24,8 +24,9 @@ services:
       - "8766:8766"                   # WebSocket alerts (thermal)
 
   # ───────────────────────────── Thermal Gun detector ───────────────────────────
+
   detector-gun:
-    build: ./detector-thermal
+    build: ./detector-gun
     environment:
       - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
       - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
@@ -33,10 +34,10 @@ services:
       - ./weights:/opt/weights        # thermal weights
     restart: unless-stopped
     ports:
-      - "9106:9106"                   # WebSocket alerts + Prometheus metrics
+      - "9106:9106"                   # WebSocket alerts
+      - "9107:9107"                   # Prometheus metrics
     command: ["python", "gun_detector.py"]
 
-  # ───────────────────────────── Fight/Fall detector (MoveNet) ───────────────────────────
   detector-ffd:
     build: ./detector-ffd
     environment:
@@ -46,7 +47,6 @@ services:
     ports:
       - "8767:8767"                   # WebSocket alerts (FFD)
       - "9105:9105"                   # Prometheus metrics (FFD)
-
   # ─────────────────────────────── Fusion service ───────────────────────────────────────
   fusion:
     build: ./fusion
