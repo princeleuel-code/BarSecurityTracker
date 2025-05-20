@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  ingestion:
+    build:
+      context: ./src/ingestion
+      dockerfile: Dockerfile # Assuming a Dockerfile exists here
+    # image: your-repo/ingestion:latest # Or use a pre-built image
+    ports:
+      # Example: if ingestion service exposes a port
+      # - "1935:1935" # RTMP port
+    volumes:
+      # Example: if you need to mount video files or config
+      # - ./video_files:/mnt/video_files
+    environment:
+      - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
+    # depends_on:
+      # - some_other_service
+
+  detectors:
+    build:
+      context: ./src/detectors
+      dockerfile: Dockerfile # Assuming a Dockerfile exists here
+    # image: your-repo/detectors:latest
+    # depends_on:
+    #   - ingestion
+    environment:
+      - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
+    #ports:
+      # - "5000:5000" # Example if detectors service has an API
+    # volumes:
+      # - ./src/detectors/y8_thermal/weights:/app/y8_thermal/weights
+      # - ./src/detectors/c2former/weights:/app/c2former/weights
+
+  postproc:
+    build:
+      context: ./src/postproc
+      dockerfile: Dockerfile # Assuming a Dockerfile exists here
+    # image: your-repo/postproc:latest
+    # depends_on:
+    #   - detectors
+    environment:
+      - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
+    # ports:
+      # - "5001:5001" # Example if postproc service has an API
+
+  api:
+    build:
+      context: ./src/api
+      dockerfile: Dockerfile # Assuming a Dockerfile exists here
+    # image: your-repo/api:latest
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ingestion
+      - detectors
+      - postproc
+    environment:
+      - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile # Assuming a SvelteKit app with a Dockerfile
+    # image: your-repo/ui:latest
+    ports:
+      - "5173:5173" # Default SvelteKit dev port
+    depends_on:
+      - api
+
+# Common environment variables (can be overridden per service)
+# x-environment: &common-env
+#   LOG_LEVEL: INFO
+
+# You might want to define networks or volumes here
+# networks:
+#   thermal_net:
+#     driver: bridge
+
+# volumes:
+#   model_weights:
