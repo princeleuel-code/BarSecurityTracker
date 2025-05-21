@@ -1,81 +1,72 @@
 version: '3.8'
 
 services:
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+
   ingestion:
     build:
       context: ./src/ingestion
-      dockerfile: Dockerfile # Assuming a Dockerfile exists here
-    # image: your-repo/ingestion:latest # Or use a pre-built image
-    ports:
-      # Example: if ingestion service exposes a port
-      # - "1935:1935" # RTMP port
-    volumes:
-      # Example: if you need to mount video files or config
-      # - ./video_files:/mnt/video_files
+      dockerfile: Dockerfile
     environment:
       - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
-    # depends_on:
-      # - some_other_service
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
 
   detectors:
     build:
       context: ./src/detectors
-      dockerfile: Dockerfile # Assuming a Dockerfile exists here
-    # image: your-repo/detectors:latest
-    # depends_on:
-    #   - ingestion
+      dockerfile: Dockerfile
     environment:
       - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
-    #ports:
-      # - "5000:5000" # Example if detectors service has an API
-    # volumes:
-      # - ./src/detectors/y8_thermal/weights:/app/y8_thermal/weights
-      # - ./src/detectors/c2former/weights:/app/c2former/weights
+      - Y8_MODEL_PATH=y8_thermal/weights/y8_thermal.onnx
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./src/detectors/y8_thermal/weights:/app/y8_thermal/weights
+    depends_on:
+      - redis
 
   postproc:
     build:
       context: ./src/postproc
-      dockerfile: Dockerfile # Assuming a Dockerfile exists here
-    # image: your-repo/postproc:latest
-    # depends_on:
-    #   - detectors
+      dockerfile: Dockerfile
     environment:
       - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
-    # ports:
-      # - "5001:5001" # Example if postproc service has an API
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
 
   api:
     build:
       context: ./src/api
-      dockerfile: Dockerfile # Assuming a Dockerfile exists here
-    # image: your-repo/api:latest
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     depends_on:
-      - ingestion
-      - detectors
-      - postproc
+      # - ingestion # Direct dependencies might change with Redis
+      # - detectors
+      # - postproc
+      - redis
     environment:
       - ONNX_EXECUTOR=${ONNX_EXECUTOR:-CPUExecutionProvider}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
 
   ui:
     build:
       context: ./ui
-      dockerfile: Dockerfile # Assuming a SvelteKit app with a Dockerfile
-    # image: your-repo/ui:latest
+      dockerfile: Dockerfile
     ports:
-      - "5173:5173" # Default SvelteKit dev port
+      - "5173:5173"
     depends_on:
       - api
 
-# Common environment variables (can be overridden per service)
-# x-environment: &common-env
-#   LOG_LEVEL: INFO
-
-# You might want to define networks or volumes here
-# networks:
-#   thermal_net:
-#     driver: bridge
-
 # volumes:
-#   model_weights:
+#   redis_data: # Example if persistence was added for Redis
+#   model_weights: # This was an example, y8 model weights are mounted directly for now.
