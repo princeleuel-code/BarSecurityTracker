@@ -3,50 +3,50 @@ services:
   detector-rgb:
     build: ./detector-rgb
     environment:
-      - RTSP_URL=rtsp://admin:1541Playdc7thst@10.1.10.239:8554/Streaming/Channels/201  # RGB camera stream
-      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}  # defaulting to CPU mode
+      - RTSP_URL=${RTSP_URL:?RTSP_URL is required}
+      - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
       - GUN_MODEL_PATH=/models/gun_yolov8n.pt
     volumes:
-      - ./models:/models:ro           # gun model weights
+      - ./models:/models:ro
     restart: unless-stopped
     ports:
-      - "8765:8765"                   # WebSocket alerts (RGB)
+      - "127.0.0.1:8765:8765"
 
   # ───────────────────────────── Thermal detector (YOLOv11‑T) ───────────────────────────
   detector-thermal:
     build: ./detector-thermal
     environment:
-      - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
+      - RTSP_URL=${THERMAL_RTSP_URL:?THERMAL_RTSP_URL is required}
       - BARSHIELD_DEVICE=cpu
     volumes:
-      - ./weights:/opt/weights        # thermal weights
+      - ./weights:/opt/weights
     restart: unless-stopped
     ports:
-      - "8766:8766"                   # WebSocket alerts (thermal)
+      - "127.0.0.1:8766:8766"
 
   # ───────────────────────────── Thermal Gun detector ───────────────────────────
   detector-gun:
     build: ./detector-thermal
     environment:
-      - RTSP_URL=${THERMAL_RTSP_URL}  # thermal camera stream
+      - RTSP_URL=${THERMAL_RTSP_URL:?THERMAL_RTSP_URL is required}
       - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
     volumes:
-      - ./weights:/opt/weights        # thermal weights
+      - ./weights:/opt/weights
     restart: unless-stopped
     ports:
-      - "9106:9106"                   # WebSocket alerts + Prometheus metrics
+      - "127.0.0.1:9106:9106"
     command: ["python", "gun_detector.py"]
 
   # ───────────────────────────── Fight/Fall detector (MoveNet) ───────────────────────────
   detector-ffd:
     build: ./detector-ffd
     environment:
-      - RTSP_URL=${RTSP_URL:-https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4}  # RGB camera stream for pose detection
+      - RTSP_URL=${RTSP_URL:?RTSP_URL is required}
       - BARSHIELD_DEVICE=${BARSHIELD_DEVICE:-cpu}
     restart: unless-stopped
     ports:
-      - "8767:8767"                   # WebSocket alerts (FFD)
-      - "9105:9105"                   # Prometheus metrics (FFD)
+      - "127.0.0.1:8767:8767"
+      - "127.0.0.1:9105:9105"
 
   # ─────────────────────────────── Fusion service ───────────────────────────────────────
   fusion:
@@ -58,7 +58,7 @@ services:
       - FFD_WS=ws://detector-ffd:8767
       - GUN_WS=ws://detector-gun:9106
     ports:
-      - "8770:8770"                   # Fused alerts WebSocket
+      - "127.0.0.1:8770:8770"
     restart: unless-stopped
 
   # ───────────────────────────── Observability stack ────────────────────────────────────
@@ -67,20 +67,20 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
 
   grafana:
     image: grafana/grafana-oss:latest
     depends_on: [prometheus]
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   # ───────────────────────────── Dashboard UI ────────────────────────────────────
   dashboard:
     build: ./dashboard
     depends_on: [alertbus]
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     restart: unless-stopped
 
   # ───────────────────────────── Alert Bus ────────────────────────────────────

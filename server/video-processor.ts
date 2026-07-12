@@ -2,16 +2,64 @@ import ffmpeg from 'ffmpeg-static';
 import { spawn } from 'child_process';
 import { storage } from './storage';
 
-const RTSP_URL = 'rtsp://admin:1541Playdc7thst@10.1.10.239:8554/Streaming/Channels/201';
 const HLS_OUTPUT_DIR = './public/hls';
 const SEGMENT_DURATION = 2;
+const ALLOWED_STREAM_PROTOCOLS = new Set(['rtsp:', 'rtsps:']);
+
+function getCameraStreamUrl(): string {
+  const configuredUrl = process.env.CAMERA_RTSP_URL ?? process.env.RTSP_URL;
+
+  if (!configuredUrl) {
+    throw new Error('CAMERA_RTSP_URL or RTSP_URL is required');
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(configuredUrl);
+  } catch {
+    throw new Error('The configured camera stream URL is invalid');
+  }
+
+  if (!ALLOWED_STREAM_PROTOCOLS.has(parsedUrl.protocol)) {
+    throw new Error('The camera stream URL must use rtsp:// or rtsps://');
+  }
+
+  return configuredUrl;
+}
+
+function redactCredentials(value: string): string {
+  return value.replace(/(rtsps?:\/\/)([^\s/@:]+):([^\s/@]+)@/gi, '$1***:***@');
+}
 
 export class VideoProcessor {
   private ffmpegProcess: ReturnType<typeof spawn> | null = null;
 
   startStreaming() {
+    if (this.ffmpegProcess) {
+      return;
+    }
+
+    let streamUrl: string;
+    try {
+      streamUrl = getCameraStreamUrl();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Camera configuration failed';
+      storage.createEvent({
+        type: 'ERROR',
+        description: message,
+        objects: []
+      });
+      throw error;
+    }
+
+    if (!ffmpeg) {
+      throw new Error('FFmpeg executable is unavailable');
+    }
+
     const args = [
-      '-i', RTSP_URL,
+      '-hide_banner',
+      '-loglevel', 'warning',
+      '-i', streamUrl,
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-tune', 'zerolatency',
@@ -24,19 +72,26 @@ export class VideoProcessor {
       `${HLS_OUTPUT_DIR}/playlist.m3u8`
     ];
 
-    this.ffmpegProcess = spawn(ffmpeg, args);
+    this.ffmpegProcess = spawn(ffmpeg, args, {
+      stdio: ['ignore', 'ignore', 'pipe']
+    });
 
     this.ffmpegProcess.stderr?.on('data', (data) => {
-      console.log('FFmpeg:', data.toString());
+      console.error('FFmpeg:', redactCredentials(data.toString()));
     });
 
     this.ffmpegProcess.on('error', (error) => {
-      console.error('FFmpeg error:', error);
+      const safeMessage = redactCredentials(error.message);
+      console.error('FFmpeg error:', safeMessage);
       storage.createEvent({
         type: 'ERROR',
-        description: `FFmpeg error: ${error.message}`,
+        description: `FFmpeg error: ${safeMessage}`,
         objects: []
       });
+    });
+
+    this.ffmpegProcess.on('exit', () => {
+      this.ffmpegProcess = null;
     });
   }
 
